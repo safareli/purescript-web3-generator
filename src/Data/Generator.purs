@@ -291,13 +291,14 @@ eventToEventFilterInstance ev@(SolidityEvent e) =
                     else "," <> joinWith "," (replicate nIndexedArgs "Nothing")
     mkFilterExpr :: String -> String
     mkFilterExpr addr = fold
-      [ "defaultFilter"
+      [ "Filter"
       , "\n\t\t"
       , joinWith "\n\t\t"
-        [ "# _address .~ Just " <> addr
-        , "# _topics .~ Just [" <> eventIdStr <> indexedVals <> "]"
-        , "# _fromBlock .~ Nothing"
-        , "# _toBlock .~ Nothing"
+        [ "{ address: Just " <> addr
+        , ", topics: Just [" <> eventIdStr <> indexedVals <> "]"
+        , ", fromBlock: Nothing"
+        , ", toBlock: Nothing"
+        , "}"
         ]
       ]
 
@@ -352,10 +353,9 @@ type GeneratorOptions = {jsonDir :: FilePath, pursDir :: FilePath, truffle :: Bo
 imports :: String
 imports = joinWith "\n" [ "import Prelude"
                         , "import Data.Monoid (mempty)"
-                        , "import Data.Lens ((.~))"
                         , "import Text.Parsing.Parser (fail)"
                         , "import Data.Maybe (Maybe(..))"
-                        , "import Network.Ethereum.Web3.Types (HexString(..), CallMode, Web3MA, BigNumber, _address, _topics, _fromBlock, _toBlock, defaultFilter)"
+                        , "import Network.Ethereum.Web3.Types (HexString(..), CallMode, Web3MA, BigNumber, Filter(..))"
                         , "import Network.Ethereum.Web3.Contract (class EventFilter, callAsync, sendTxAsync)"
                         , "import Network.Ethereum.Web3.Solidity"
                         ]
