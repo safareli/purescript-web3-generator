@@ -254,7 +254,8 @@ instance codeHelperFunction :: Code HelperFunction where
 eventToDataDecl :: SolidityEvent -> DataDecl
 eventToDataDecl (SolidityEvent ev) =
   DataDecl { constructor: ev.name
-           , factorTypes: map (toPSType <<< \(IndexedSolidityValue sv) -> sv.type) ev.inputs
+           , factorTypes: let as = filter (\(IndexedSolidityValue sv) -> not sv.indexed) ev.inputs
+                          in map (toPSType <<< \(IndexedSolidityValue sv) -> sv.type) as
            }
 
 data ParserMethod =
