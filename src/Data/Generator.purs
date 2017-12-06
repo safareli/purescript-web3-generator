@@ -41,8 +41,8 @@ class Code a where
 -- | Utils
 --------------------------------------------------------------------------------
 
-toSignature :: SolidityFunction -> String
-toSignature (SolidityFunction f) =
+toSelector :: SolidityFunction -> String
+toSelector (SolidityFunction f) =
   let args = map (\i -> format i) f.inputs
   in f.name <> "(" <> joinWith "," args <> ")"
 
@@ -90,32 +90,29 @@ toPSType s = case s of
           then "(" <> "Vector " <> vectorLength head <> " " <> toPSType a' <> ")"
           else "(" <> "Vector " <> vectorLength head <> " " <> expandVector tail a' <> ")"
 
-{-
-unAliasLength :: String -> String
-unAliasLength s =
-    let n = unsafePartial fromJust $ do
-          n' <- stripPrefix (Pattern "N") s
-          fromString n'
-    in unpackLength n
-  where unpackLength n = if n == 0 then "Z" else "S (" <> unpackLength (n -1) <> ")"
--}
-
 --------------------------------------------------------------------------------
 -- | Data decleration, instances, and helpers
 --------------------------------------------------------------------------------
 
 -- | Data declaration
 data FunTypeDecl =
-  FunTypeDecl { signature :: String
+  FunTypeDecl { selector :: String
               , factorTypes :: Array String
               , typeName :: String
               }
 
-funToTypeDecl :: SolidityFunction -> GeneratorOptions -> FunTypeDecl
-funToTypeDecl fun@(SolidityFunction f) opts =
+funToInputTypeDecl :: SolidityFunction -> GeneratorOptions -> FunTypeDecl
+funToInputTypeDecl fun@(SolidityFunction f) opts =
   FunTypeDecl { typeName : capitalize $ opts.prefix <> f.name <> "Fn"
               , factorTypes : map toPSType f.inputs
-              , signature: toSignature fun
+              , selector: toSelector fun
+              }
+
+funToOutputTypeDecl :: SolidityFunction -> GeneratorOptions -> FunTypeDecl
+funToOutputTypeDecl fun@(SolidityFunction f) opts =
+  FunTypeDecl { typeName : capitalize $ opts.prefix <> f.name <> "Return"
+              , factorTypes : map toPSType f.outputs
+              , selector: toSelector fun
               }
 
 instance codeDataDecl :: Code FunTypeDecl where
@@ -124,7 +121,7 @@ instance codeDataDecl :: Code FunTypeDecl where
     in fold [ "type "
             , decl.typeName
             , " = "
-            , "Tagged (SProxy \"" <> decl.signature <> "\") (Tuple" <> show nArgs <> " " <> joinWith " " decl.factorTypes <> ")"
+            , "Tagged (SProxy \"" <> decl.selector <> "\") (Tuple" <> show nArgs <> " " <> joinWith " " decl.factorTypes <> ")"
             ]
 
 --------------------------------------------------------------------------------
@@ -143,7 +140,7 @@ data HelperFunction =
 
 funToHelperFunction :: SolidityFunction -> GeneratorOptions -> HelperFunction
 funToHelperFunction fun@(SolidityFunction f) opts =
-    let (FunTypeDecl decl) = funToTypeDecl fun opts
+    let (FunTypeDecl decl) = funToInputTypeDecl fun opts
         sigPrefix = if f.constant then callSigPrefix else sendSigPrefix
         constraints = if f.constant || not f.payable
                         then ["IsAsyncProvider p"]
@@ -341,7 +338,7 @@ data CodeBlock =
   | EventCodeBlock EventDataDecl  EventFilterInstance EventDecodeInstance EventGenericInstance
 
 funToFunctionCodeBlock :: SolidityFunction -> GeneratorOptions -> CodeBlock
-funToFunctionCodeBlock f opts = FunctionCodeBlock (funToTypeDecl f opts) (funToHelperFunction f opts)
+funToFunctionCodeBlock f opts = FunctionCodeBlock (funToInputTypeDecl f opts) (funToHelperFunction f opts)
 
 instance codeFunctionCodeBlock :: Code CodeBlock where
   genCode (FunctionCodeBlock decl@(FunTypeDecl d) helper) opts =
