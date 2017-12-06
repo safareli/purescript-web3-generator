@@ -10,22 +10,21 @@ import Control.Monad.Eff.Class (liftEff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.Exception (error)
 import Control.Monad.Error.Class (throwError)
-import Data.AbiParser (Abi(..), AbiType(..), IndexedSolidityValue(..), SolidityEvent(..), SolidityFunction(..), SolidityType(..), format)
+import Data.AbiParser (Abi(..), AbiType(..), IndexedSolidityValue(..), SolidityEvent(..), SolidityFunction(..), SolidityType(..), format, NamedType(..))
 import Data.Argonaut (Json, decodeJson)
 import Data.Argonaut.Parser (jsonParser)
 import Data.Argonaut.Prisms (_Object)
 import Data.Array (filter, length, mapWithIndex, replicate, uncons, unsafeIndex, zip, zipWith, (:))
 import Data.Either (Either, either)
 import Data.Foldable (fold)
-import Data.Int (fromString)
 import Data.Lens ((^?))
 import Data.Lens.Index (ix)
-import Data.Maybe (Maybe(..), fromJust)
-import Data.String (Pattern(..), drop, fromCharArray, joinWith, singleton, stripPrefix, take, toCharArray, toLower, toUpper)
+import Data.Maybe (Maybe(..))
+import Data.String (drop, fromCharArray, joinWith, singleton, take, toCharArray, toLower, toUpper)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..), uncurry)
 import Network.Ethereum.Web3.Types.Sha3 (sha3)
-import Network.Ethereum.Web3.Types.Types (HexString(..), unHex)
+import Network.Ethereum.Web3.Types.Types (HexString, unHex)
 import Node.Encoding (Encoding(UTF8))
 import Node.FS.Aff (FS, readTextFile, writeTextFile, readdir, mkdir, exists)
 import Node.Path (FilePath, basenameWithoutExt, extname)
@@ -43,7 +42,7 @@ class Code a where
 
 toSignature :: SolidityFunction -> String
 toSignature (SolidityFunction f) =
-  let args = map (\i -> format i) f.inputs
+  let args = map (\(NamedType i) -> format i.type) f.inputs
   in f.name <> "(" <> joinWith "," args <> ")"
 
 capitalize :: String -> String
@@ -114,7 +113,7 @@ data FunTypeDecl =
 funToTypeDecl :: SolidityFunction -> GeneratorOptions -> FunTypeDecl
 funToTypeDecl fun@(SolidityFunction f) opts =
   FunTypeDecl { typeName : capitalize $ opts.prefix <> f.name <> "Fn"
-              , factorTypes : map toPSType f.inputs
+              , factorTypes : map (\(NamedType i) -> toPSType i.type) f.inputs
               , signature: toSignature fun
               }
 
@@ -144,6 +143,8 @@ data HelperFunction =
 funToHelperFunction :: SolidityFunction -> GeneratorOptions -> HelperFunction
 funToHelperFunction fun@(SolidityFunction f) opts =
     let (FunTypeDecl decl) = funToTypeDecl fun opts
+        inputs = map (\(NamedType i) -> i.type) f.inputs
+        outputs = map (\(NamedType i) -> i.type) f.outputs
         sigPrefix = if f.constant then callSigPrefix else sendSigPrefix
         constraints = if f.constant || not f.payable
                         then ["IsAsyncProvider p"]
@@ -162,10 +163,10 @@ funToHelperFunction fun@(SolidityFunction f) opts =
                                then ["x0", "x1", "cm"]
                                else ["x0", "x1", "u"]
         offset = length stockVars
-        conVars = mapWithIndex (\i _ -> "x" <> show (offset + i)) f.inputs
-        helperTransport = toTransportPrefix f.constant $ length f.outputs
+        conVars = mapWithIndex (\i _ -> "x" <> show (offset + i)) inputs
+        helperTransport = toTransportPrefix f.constant $ length outputs
         helperPayload = toPayload decl.typeName conVars
-    in HelperFunction { signature : sigPrefix <> map toPSType f.inputs <> [toReturnType f.constant $ map toPSType f.outputs]
+    in HelperFunction { signature : sigPrefix <> map toPSType inputs <> [toReturnType f.constant $ map toPSType outputs]
                       , unpackExpr : {name : lowerCase $ opts.prefix <> f.name, stockArgs : stockVars, stockArgsR : stockArgsR, payloadArgs : conVars}
                       , payload : helperPayload
                       , transport : helperTransport

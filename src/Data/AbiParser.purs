@@ -129,22 +129,32 @@ solidityTypeParser =
 parseSolidityType :: String -> Either String SolidityType
 parseSolidityType s = fmapL show $ runParser solidityTypeParser s
 
-instance decodeJsonSolidityType :: DecodeJson SolidityType where
-  decodeJson json = do
-    obj <- decodeJson json
-    t <- obj .? "type"
-    case parseSolidityType t of
-      Left err -> Left $ "Failed to parse SolidityType " <> t <> " : "  <> err
-      Right typ -> Right typ
-
 --------------------------------------------------------------------------------
 -- | Solidity Function Parser
 --------------------------------------------------------------------------------
 
+data NamedType =
+  NamedType { type :: SolidityType
+                , name :: Maybe String
+                }
+
+derive instance genericNamedType :: Generic NamedType
+
+instance decodeJsonNamedType :: DecodeJson NamedType where
+  decodeJson json = do
+    obj <- decodeJson json
+    t <- obj .? "type"
+    n <- obj .? "name"
+    case parseSolidityType t of
+      Left err -> Left $ "Failed to parse SolidityType " <> t <> " : "  <> err
+      Right typ -> Right <<< NamedType $ { type: typ
+                                             , name: n
+                                             }
+
 data SolidityFunction =
   SolidityFunction { name :: String
-                   , inputs :: Array SolidityType
-                   , outputs :: Array SolidityType
+                   , inputs :: Array NamedType
+                   , outputs :: Array NamedType
                    , constant :: Boolean
                    , payable :: Boolean
                    }
@@ -175,7 +185,7 @@ instance decodeJsonSolidityFunction :: DecodeJson SolidityFunction where
 --------------------------------------------------------------------------------
 
 data SolidityConstructor =
-  SolidityConstructor { inputs :: Array SolidityType
+  SolidityConstructor { inputs :: Array NamedType
                       }
 
 derive instance genericSolidityConstructor :: Generic SolidityConstructor
