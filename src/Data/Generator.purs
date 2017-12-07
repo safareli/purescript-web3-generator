@@ -19,7 +19,7 @@ import Data.Either (Either, either)
 import Data.Foldable (fold)
 import Data.Lens ((^?))
 import Data.Lens.Index (ix)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (drop, fromCharArray, joinWith, singleton, take, toCharArray, toLower, toUpper)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..), uncurry)
@@ -107,7 +107,7 @@ funToInputTypeDecl fun@(SolidityFunction f) opts =
               , selector: toSelector fun
               }
 
-instance codeDataDecl :: Code FunInputTypeDecl where
+instance codeInputDecl :: Code FunInputTypeDecl where
   genCode (FunInputTypeDecl decl) _ =
     let nArgs = length decl.factorTypes
     in fold [ "type "
@@ -115,6 +115,30 @@ instance codeDataDecl :: Code FunInputTypeDecl where
             , " = "
             , "Tagged (SProxy \"" <> decl.selector <> "\") (Tuple" <> show nArgs <> " " <> joinWith " " decl.factorTypes <> ")"
             ]
+
+
+data FunOutputTypeDecl =
+  FunOutputTypeDecl { factorTypes :: Array (Tuple String String)
+                    , typeName :: String
+                    }
+
+funToOutputTypeDecl :: SolidityFunction -> GeneratorOptions -> FunOutputTypeDecl
+funToOutputTypeDecl fun@(SolidityFunction f) opts =
+  FunOutputTypeDecl { typeName : capitalize $ opts.prefix <> f.name <> "Return"
+                    , factorTypes : map (\(NamedType i) -> Tuple (fromMaybe "" i.name) $ toPSType i.type) f.outputs
+                    }
+
+
+instance codeOutputDecl :: Code FunOutputTypeDecl where
+  genCode (FunOutputTypeDecl decl) _ =
+    let nArgs = length decl.factorTypes
+        mkTaggedArg (Tuple n t) = "(Tagged (SProxy \"" <> n <> "\") " <> t <> ")"
+    in fold [ "type "
+            , decl.typeName
+            , " = "
+            , "Tuple" <> show nArgs <> " " <> joinWith " " (map mkTaggedArg decl.factorTypes)
+            ]
+
 
 --------------------------------------------------------------------------------
 -- | Helper functions (asynchronous call/send)
